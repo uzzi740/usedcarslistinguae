@@ -1,1 +1,237 @@
+1. Body Type Analysis
+
+Question: What are the top 5 most common car body types (e.g., SUV, Sedan, Coupe) in the dataset, and how many listings does each have?
+
+SELECT TOP 5
+    body_type,
+    COUNT(*) AS number_of_listings
+FROM 
+    usedcarlisting
+GROUP BY 
+    body_type
+ORDER BY 
+    number_of_listings DESC;
+
+
+2. City-Based Listings
+
+Question: Which city has the highest number of car listings, and what is the average price of cars in that city?
+
+SELECT
+city_corrected,
+COUNT(*) AS number_of_listings
+FROM
+usedcarlisting
+GROUP BY 
+city_corrected
+ORDER BY
+city_corrected
+
+
+3. Price Averages by Category
+
+
+Question: What is the average price of "Budget" cars vs. "Luxury" cars across all cities?
+
+SELECT
+    price_type,
+    AVG(price) AS average_price,
+    COUNT(*) AS number_of_cars
+FROM 
+    usedcarlisting
+WHERE 
+    price_type IN ('Budget Car', 'Luxury Car', 'Expensive Car','Economical Car')
+GROUP BY 
+    price_type
+ORDER BY 
+    average_price DESC;
+
+
+
+4. Most Expensive Cars
+
+
+Question: List the top 10 most expensive cars (include make, model, price, and city), filtering only 
+for cars with "Excellent" engine condition.
+
+SELECT TOP 10
+    listing_number,
+    make, 
+    car_name, 
+    price, 
+    city_corrected,
+    CASE 
+        WHEN engine_repaired = 0 THEN 'No' 
+        WHEN engine_repaired = 1 THEN 'Yes' 
+    END AS engine_repair_status
+FROM 
+    usedcarlisting
+WHERE 
+    engine_repaired = 0
+ORDER BY 
+    price DESC;
+
+
+5. Budget Cars with Key Features
+
+
+Question: How many "Budget" cars (below a specific price, e.g., 50,000 AED) have at least three of these features: Rear Camera, Leather Seats, Navigation, or Cruise Control?
+
+SELECT 
+    listing_number,
+    make, 
+    car_name, 
+    price,
+    city_corrected,
+    CASE WHEN rear_camera = 1 THEN 'Yes' ELSE 'No' END AS has_rear_camera,
+    CASE WHEN leather_seats = 1 THEN 'Yes' ELSE 'No' END AS has_leather_seats,
+    CASE WHEN navigation = 1 THEN 'Yes' ELSE 'No' END AS has_navigation,
+    CASE WHEN cruise_control = 1 THEN 'Yes' ELSE 'No' END AS has_cruise_control
+FROM 
+    usedcarlisting
+WHERE 
+    price <= 50000
+    AND price_type = 'Budget Car'
+    AND (
+        (CASE WHEN rear_camera = 1 THEN 1 ELSE 0 END +
+         CASE WHEN leather_seats = 1 THEN 1 ELSE 0 END +
+         CASE WHEN navigation = 1 THEN 1 ELSE 0 END +
+         CASE WHEN cruise_control = 1 THEN 1 ELSE 0 END) >= 3
+    )
+ORDER BY 
+    price ASC;
+
+
+6. Transmission Type Popularity
+
+
+Question: What percentage of cars have "Automatic" transmission vs. "Manual" transmission?
+
+SELECT 
+    transmission,
+    COUNT(*) AS number_of_cars,
+    CAST(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER() AS DECIMAL(5,2)) AS percentage
+FROM 
+    usedcarlisting
+WHERE 
+    transmission IN ('Automatic Transmission', 'Manual Transmission')  -- Filters only these two types
+GROUP BY 
+    transmission
+ORDER BY 
+    number_of_cars DESC;
+
+Alternative method is using Subquery 
+
+SELECT 
+    transmission,
+    COUNT(*) AS number_of_cars,
+    CAST(COUNT(*) * 100.0 / (SELECT COUNT(*) 
+                            FROM usedcarlisting 
+                            WHERE transmission IN ('Automatic Transmission', 'Manual Transmission')) 
+                            AS DECIMAL(5,2)) AS percentage
+FROM 
+    usedcarlisting
+WHERE 
+    transmission IN ('Automatic Transmission', 'Manual Transmission')
+GROUP BY 
+    transmission;
+
+
+7. Fuel Type vs. Price
+
+
+Question: Compare the average price of cars running on "Gasoline" vs. "Diesel" vs. "Hybrid" fuel types.
+
+SELECT 
+    fuel_type,
+    COUNT(*) AS number_of_cars,
+    AVG(CAST(price AS DECIMAL(18,2))) AS average_price,
+    MIN(CAST(price AS DECIMAL(18,2))) AS minimum_price,
+    MAX(CAST(price AS DECIMAL(18,2))) AS maximum_price
+FROM 
+    usedcarlisting
+WHERE 
+    fuel_type IN ('Gasoline', 'Diesel', 'Hybrid')
+GROUP BY 
+    fuel_type
+ORDER BY 
+    average_price DESC;
+
+
+8. Luxury Cars in Specific Cities
+
+
+Question: Which city has the highest number of "Luxury" car listings, and what’s the most common body type among them?
+
+WITH LuxuryCarsByCity AS (
+    SELECT 
+        city_corrected,
+        COUNT(*) AS luxury_car_count
+    FROM 
+        usedcarlisting
+    WHERE 
+        price_type = 'Luxury Car'
+    GROUP BY 
+        city_corrected
+),
+TopCity AS (
+    SELECT TOP 1
+        city_corrected,
+        luxury_car_count
+    FROM 
+        LuxuryCarsByCity
+    ORDER BY 
+        luxury_car_count DESC
+),
+CommonBodyType AS (
+    SELECT TOP 1
+        body_type,
+        COUNT(*) AS body_type_count
+    FROM 
+        usedcarlisting
+    WHERE 
+        price_type = 'Luxury Car'
+        AND city_corrected = (SELECT city_corrected FROM TopCity)
+    GROUP BY 
+        body_type
+    ORDER BY 
+        body_type_count DESC
+)
+SELECT 
+    t.city_corrected AS top_luxury_city,
+    t.luxury_car_count,
+    c.body_type AS most_common_body_type,
+    c.body_type_count,
+    CAST(c.body_type_count * 100.0 / t.luxury_car_count AS DECIMAL(5,2)) AS percentage
+FROM 
+    TopCity t
+CROSS JOIN 
+    CommonBodyType c;
+
+
+9. Year-Wise Price Trends
+
+
+Question: How does the average price of cars change based on their manufacturing year (e.g., 2015 vs. 2020 models)?
+
+SELECT 
+    year AS manufacturing_year,
+    COUNT(*) AS cars_listed,
+    AVG(CAST(price AS DECIMAL(18,2))) AS avg_price,
+    MIN(CAST(price AS DECIMAL(18,2))) AS min_price,
+    MAX(CAST(price AS DECIMAL(18,2))) AS max_price,
+    FORMAT(AVG(CAST(price AS DECIMAL(18,2))), 'N0') AS formatted_avg_price,
+    LAG(AVG(CAST(price AS DECIMAL(18,2))), 1) OVER (ORDER BY year) AS prev_year_avg,
+    AVG(CAST(price AS DECIMAL(18,2))) - LAG(AVG(CAST(price AS DECIMAL(18,2))), 1) OVER (ORDER BY year) AS year_over_year_diff
+FROM 
+    usedcarlisting
+WHERE 
+    year BETWEEN YEAR(GETDATE()) - 10 AND YEAR(GETDATE())  -- Last 10 years
+    AND price > 0  -- Exclude invalid prices
+GROUP BY 
+    year
+ORDER BY 
+    year DESC;
+
+
 
